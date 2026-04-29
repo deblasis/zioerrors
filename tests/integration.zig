@@ -77,3 +77,75 @@ test "two threads have independent contexts" {
     t1.join();
     t2.join();
 }
+
+// OOM during capture must be swallowed: fail/failf return the original
+// error value, the error set is never widened, no panic, no leaks. The
+// resulting report is well-formed (possibly empty) and still prints.
+//
+// Two scenarios are covered:
+//   1. Total starvation (fail_index = 0): every allocation fails, so the
+//      frame stack stays empty and the report renders bare `error.X`.
+//   2. Partial starvation (fail_index = 1): the initial frame append
+//      may succeed but subsequent message/attr allocations fail. The
+//      report still renders without crashing.
+
+test "OOM during fail capture is swallowed under total starvation" {
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
+        .fail_index = 0,
+    });
+    var ctx = zio.Context.init(failing.allocator());
+    defer ctx.deinit();
+    zio.install(&ctx);
+    defer zio.uninstall();
+
+    const e: anyerror = zio.fail(error.NotFound, @src())
+        .ctx("loading config")
+        .ctxf("loading {s}", .{"config"})
+        .attr("path", "/etc/app.toml")
+        .attr("size", @as(u64, 1024))
+        .err();
+
+    // Original error preserved, no widening.
+    try std.testing.expectEqual(@as(anyerror, error.NotFound), e);
+
+    // Same for the one-shot failf path.
+    const e2: anyerror = zio.failf(error.X, @src(), "ctx {d}", .{42});
+    try std.testing.expectEqual(@as(anyerror, error.X), e2);
+
+    // Report must still render. Under total starvation no frame was
+    // pushed, so the report degrades to the bare error form.
+    var buf: [128]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try zio.report(error.NotFound).format(&w);
+    try std.testing.expectEqualStrings("error.NotFound", buf[0..w.end]);
+}
+
+test "OOM during fail capture is swallowed under partial starvation" {
+    // Allow exactly one allocation to succeed, then fail. This exercises
+    // the path where a frame may land but subsequent context-string and
+    // attribute allocations cannot. The report must still render without
+    // panic, regardless of how much (or how little) made it in.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
+        .fail_index = 1,
+    });
+    var ctx = zio.Context.init(failing.allocator());
+    defer ctx.deinit();
+    zio.install(&ctx);
+    defer zio.uninstall();
+
+    const e: anyerror = zio.fail(error.X, @src())
+        .ctx("op")
+        .attr("k1", "v1")
+        .attr("k2", @as(i64, -7))
+        .err();
+    try std.testing.expectEqual(@as(anyerror, error.X), e);
+
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try zio.report(error.X).format(&w);
+    const out = buf[0..w.end];
+
+    // Report always begins with the bare error tag, whether or not a
+    // frame survived the OOM.
+    try std.testing.expect(std.mem.startsWith(u8, out, "error.X"));
+}
