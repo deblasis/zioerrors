@@ -20,6 +20,7 @@ const std = @import("std");
 pub const frame = @import("frame.zig");
 pub const context = @import("context.zig");
 pub const builder_mod = @import("builder.zig");
+pub const report_mod = @import("report.zig");
 
 pub const Attr = frame.Attr;
 pub const AttrValue = frame.AttrValue;
@@ -27,6 +28,12 @@ pub const Frame = frame.Frame;
 pub const Context = context.Context;
 pub const Error = context.Error;
 pub const Builder = builder_mod.Builder;
+pub const Report = report_mod.Report;
+
+/// Snapshot the current thread's breadcrumbs as a Report bound to the
+/// given error. The Report is printable via `{f}` in `std.fmt`, e.g.
+/// `std.log.err("{f}", .{zioerrors.report(err)});`.
+pub const report = report_mod.report;
 
 /// Push a new breadcrumb frame for `err_value` and return a Builder.
 /// Use as: `return zioerrors.fail(err).ctx("op").attr("k", v).err();`.
@@ -65,6 +72,7 @@ test {
     _ = frame;
     _ = context;
     _ = builder_mod;
+    _ = report_mod;
 }
 
 test "clear is safe with no installed context" {
