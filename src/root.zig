@@ -36,21 +36,28 @@ pub const Report = report_mod.Report;
 pub const report = report_mod.report;
 
 /// Push a new breadcrumb frame for `err_value` and return a Builder.
-/// Use as: `return zioerrors.fail(err).ctx("op").attr("k", v).err();`.
+/// Pass `@src()` so the frame records the caller's source location:
+///
+///     return zioerrors.fail(err, @src()).ctx("op").attr("k", v).err();
+///
+/// Zig has no parameter defaults, so callers must pass `@src()`
+/// explicitly. The cost is one token; the gain is that the frame
+/// shows where the failure was raised, not where the wrapper lives.
 /// The Builder is a no-op if no Context is installed on this thread,
 /// but the original error still propagates through `.err()`.
-pub inline fn fail(err_value: anyerror) Builder {
-    return builder_mod.fail(err_value, @src());
+pub fn fail(err_value: anyerror, src: std.builtin.SourceLocation) Builder {
+    return builder_mod.fail(err_value, src);
 }
 
 /// One-shot fail with a comptime-formatted context line. Wraps
-/// `fail(err).ctxf(fmt, args).err()`.
-pub inline fn failf(
+/// `fail(err, src).ctxf(fmt, args).err()`. Pass `@src()` for `src`.
+pub fn failf(
     err_value: anyerror,
+    src: std.builtin.SourceLocation,
     comptime fmt: []const u8,
     args: anytype,
 ) anyerror {
-    return builder_mod.failf(err_value, @src(), fmt, args);
+    return builder_mod.failf(err_value, src, fmt, args);
 }
 
 /// Install the caller-owned Context as this thread's breadcrumb
