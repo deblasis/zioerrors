@@ -36,6 +36,16 @@ pub inline fn fail(err_value: anyerror) Builder {
     return builder_mod.fail(err_value, @src());
 }
 
+/// One-shot fail with a comptime-formatted context line. Wraps
+/// `fail(err).ctxf(fmt, args).err()`.
+pub inline fn failf(
+    err_value: anyerror,
+    comptime fmt: []const u8,
+    args: anytype,
+) anyerror {
+    return builder_mod.failf(err_value, @src(), fmt, args);
+}
+
 /// Install the caller-owned Context as this thread's breadcrumb
 /// store. Caller is responsible for `Context.init` and
 /// `Context.deinit`.

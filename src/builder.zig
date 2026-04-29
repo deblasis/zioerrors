@@ -126,6 +126,17 @@ pub fn fail(err_value: anyerror, src: std.builtin.SourceLocation) Builder {
     return .{ .err_value = err_value };
 }
 
+/// One-shot fail with a comptime-formatted context. Equivalent to
+/// `fail(err, src).ctxf(fmt, args).err()`.
+pub fn failf(
+    err_value: anyerror,
+    src: std.builtin.SourceLocation,
+    comptime fmt: []const u8,
+    args: anytype,
+) anyerror {
+    return fail(err_value, src).ctxf(fmt, args).err();
+}
+
 fn here() std.builtin.SourceLocation {
     return @src();
 }
@@ -198,6 +209,18 @@ test "attr accepts string literal pointer" {
 
     _ = fail(error.X, here()).ctx("op").attr("kind", "literal");
     try std.testing.expectEqualStrings("literal", c.frames.items[0].attrs[0].value.str);
+}
+
+test "failf records a single formatted frame" {
+    var c = context.Context.init(std.testing.allocator);
+    defer c.deinit();
+    context.install(&c);
+    defer context.uninstall();
+
+    const e = failf(error.X, here(), "loading {s} (n={d})", .{ "config", 3 });
+    try std.testing.expectEqual(@as(anyerror, error.X), e);
+    try std.testing.expectEqual(@as(usize, 1), c.frames.items.len);
+    try std.testing.expectEqualStrings("loading config (n=3)", c.frames.items[0].msg);
 }
 
 test "attr is a no-op without installed context" {
