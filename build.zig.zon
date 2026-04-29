@@ -1,0 +1,16 @@
+.{
+    .name = .zioerrors,
+    .version = "0.1.0",
+    .fingerprint = 0xbc4d28c7d3578987,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "examples",
+        "tests",
+        "LICENSE",
+        "README.md",
+    },
+}
