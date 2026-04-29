@@ -19,12 +19,22 @@ const std = @import("std");
 
 pub const frame = @import("frame.zig");
 pub const context = @import("context.zig");
+pub const builder_mod = @import("builder.zig");
 
 pub const Attr = frame.Attr;
 pub const AttrValue = frame.AttrValue;
 pub const Frame = frame.Frame;
 pub const Context = context.Context;
 pub const Error = context.Error;
+pub const Builder = builder_mod.Builder;
+
+/// Push a new breadcrumb frame for `err_value` and return a Builder.
+/// Use as: `return zioerrors.fail(err).ctx("op").attr("k", v).err();`.
+/// The Builder is a no-op if no Context is installed on this thread,
+/// but the original error still propagates through `.err()`.
+pub inline fn fail(err_value: anyerror) Builder {
+    return builder_mod.fail(err_value, @src());
+}
 
 /// Install the caller-owned Context as this thread's breadcrumb
 /// store. Caller is responsible for `Context.init` and
@@ -44,6 +54,7 @@ pub fn clear() void {
 test {
     _ = frame;
     _ = context;
+    _ = builder_mod;
 }
 
 test "clear is safe with no installed context" {
