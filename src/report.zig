@@ -163,3 +163,61 @@ test "report formats multi-frame chain newest first" {
         buf[0..w.end],
     );
 }
+
+test "report formats caused-by frame with attrs but no message" {
+    // A "caused by" frame that has attrs but an empty message should
+    // print the attrs without a stray colon.
+    var c = context.Context.init(std.testing.allocator);
+    defer c.deinit();
+    context.install(&c);
+    defer context.uninstall();
+
+    const builder = @import("builder.zig");
+    const src_a: std.builtin.SourceLocation = .{
+        .module = "t",
+        .file = "deep.zig",
+        .fn_name = "f",
+        .line = 99,
+        .column = 1,
+    };
+    const src_b: std.builtin.SourceLocation = .{
+        .module = "t",
+        .file = "top.zig",
+        .fn_name = "g",
+        .line = 10,
+        .column = 1,
+    };
+    _ = builder.fail(error.Timeout, src_a).attr("ms", @as(i64, 5000));
+    _ = builder.fail(error.Timeout, src_b).ctx("connect");
+
+    const r = report(error.Timeout);
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try r.format(&w);
+    try std.testing.expectEqualStrings(
+        "error.Timeout: connect\n  at top.zig:10\ncaused by error.Timeout (ms=5000)\n  at deep.zig:99",
+        buf[0..w.end],
+    );
+}
+
+test "report with float and bool attrs" {
+    var c = context.Context.init(std.testing.allocator);
+    defer c.deinit();
+    context.install(&c);
+    defer context.uninstall();
+
+    const builder = @import("builder.zig");
+    _ = builder.fail(error.X, test_src)
+        .ctx("metrics")
+        .attr("elapsed", @as(f64, 3.14))
+        .attr("ok", true);
+
+    const r = report(error.X);
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try r.format(&w);
+    try std.testing.expectEqualStrings(
+        "error.X: metrics (elapsed=3.14, ok=true)\n  at src/x.zig:10",
+        buf[0..w.end],
+    );
+}
