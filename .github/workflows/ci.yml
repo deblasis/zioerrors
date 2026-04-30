@@ -22,3 +22,5 @@ jobs:
         run: zig fmt --check src tests examples build.zig
       - name: zig build test
         run: zig build test --summary all
+      - name: zig build run-example
+        run: zig build run-example

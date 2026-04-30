@@ -153,6 +153,13 @@ See `docs/superpowers/SEED.md` for the original brief and
 `docs/superpowers/specs/2026-04-29-zioerrors-design.md` for the v0.1
 design notes.
 
+## Compatibility
+
+- **Zig**: 0.16.0 (tracked in CI; earlier versions are not supported).
+- **Platforms**: tested on Linux (x86_64), macOS (x86_64, aarch64), Windows (x86_64).
+- **Breaking changes**: pinned to the Zig 0.16 stable release cycle. A major-version bump in Zig may require a major-version bump here.
+
+
 ## License
 
 MIT. Copyright (c) 2026 Alessandro De Blasis.

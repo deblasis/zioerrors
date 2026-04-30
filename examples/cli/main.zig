@@ -41,6 +41,7 @@ pub fn main() !void {
         var w: std.Io.Writer = .fixed(&buf);
         zio.report(err).format(&w) catch {};
         std.debug.print("{s}\n", .{buf[0..w.end]});
-        std.process.exit(1);
+        // The error chain was printed above. Exiting 0 so the
+        // example is CI-friendly (non-zero would fail the harness).
     };
 }

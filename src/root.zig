@@ -17,17 +17,28 @@
 
 const std = @import("std");
 
+/// Internal frame module. Access via the re-exported types below.
 pub const frame = @import("frame.zig");
+/// Internal context module.
 pub const context = @import("context.zig");
+/// Internal builder module.
 pub const builder_mod = @import("builder.zig");
+/// Internal report module.
 pub const report_mod = @import("report.zig");
 
+/// One key/value attribute attached to a frame.
 pub const Attr = frame.Attr;
+/// Tagged value type for attribute payloads.
 pub const AttrValue = frame.AttrValue;
+/// One breadcrumb frame in the error chain.
 pub const Frame = frame.Frame;
+/// Per-thread context holding the arena and frame stack.
 pub const Context = context.Context;
+/// Errors raised by the context module.
 pub const Error = context.Error;
+/// Chainable builder returned by `fail`.
 pub const Builder = builder_mod.Builder;
+/// Snapshot of a thread's breadcrumbs, formattable via `{f}`.
 pub const Report = report_mod.Report;
 
 /// Snapshot the current thread's breadcrumbs as a Report bound to the

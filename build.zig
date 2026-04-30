@@ -48,4 +48,21 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_example.addArgs(args);
     const run_example_step = b.step("run-example", "Run examples/cli");
     run_example_step.dependOn(&run_example.step);
+
+    // Second example: multi-layer error chain
+    const ml_mod = b.createModule(.{
+        .root_source_file = b.path("examples/multi_layer/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "zioerrors", .module = mod }},
+    });
+    const ml_exe = b.addExecutable(.{
+        .name = "zioerrors-multi-layer",
+        .root_module = ml_mod,
+    });
+    b.installArtifact(ml_exe);
+    const run_ml = b.addRunArtifact(ml_exe);
+    if (b.args) |args| run_ml.addArgs(args);
+    const run_ml_step = b.step("run-example-multi-layer", "Run multi-layer example");
+    run_ml_step.dependOn(&run_ml.step);
 }
