@@ -21,6 +21,7 @@ fmt:
 test:
     zig build test --summary all
 
-# build and run the example so it cannot silently rot
+# build and run the examples so they cannot silently rot
 example:
     zig build run-example
+    zig build run-example-multi-layer

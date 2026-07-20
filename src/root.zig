@@ -44,6 +44,15 @@ pub const Report = report_mod.Report;
 /// Snapshot the current thread's breadcrumbs as a Report bound to the
 /// given error. The Report is printable via `{f}` in `std.fmt`, e.g.
 /// `std.log.err("{f}", .{zioerrors.report(err)});`.
+///
+/// Each frame prints the error it was raised for, so a layer that
+/// translates one error into another is shown honestly.
+///
+/// Calling `report` ends the current chain. The frames stay readable
+/// until the next `fail` on this thread, which drops them and starts a
+/// new chain. That is what keeps a forgotten `clear` from attaching one
+/// operation's breadcrumbs to the next operation's error. Format or
+/// copy the Report before failing again.
 pub const report = report_mod.report;
 
 /// Push a new breadcrumb frame for `err_value` and return a Builder.
@@ -80,8 +89,9 @@ pub const install = context.install;
 pub const uninstall = context.uninstall;
 
 /// Drop all frames recorded on this thread since the last clear.
-/// Cheap (arena reset). Boundary code should call this between
-/// independent operations on the same thread.
+/// Cheap (arena reset). `report` already ends a chain, so this is only
+/// needed when an operation fails, is handled without a report, and the
+/// thread goes on to do unrelated work.
 pub fn clear() void {
     if (context.current) |c| c.clear();
 }

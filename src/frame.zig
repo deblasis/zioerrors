@@ -24,6 +24,10 @@ pub const AttrValue = union(enum) {
 /// into the owning Context's arena. The frame itself owns no allocations
 /// directly: the arena does.
 pub const Frame = struct {
+    /// The error value this frame was raised for, recorded by `fail`.
+    /// Each frame carries its own so a report never relabels one
+    /// layer's failure with another layer's error name.
+    err_value: anyerror,
     msg: []const u8,
     attrs: []Attr,
     file: []const u8,
@@ -51,11 +55,13 @@ test "AttrValue covers string, int, uint, float, bool" {
 
 test "Frame fields are addressable" {
     const f: Frame = .{
+        .err_value = error.FileNotFound,
         .msg = "loading config",
         .attrs = &.{},
         .file = "src/config.zig",
         .line = 42,
     };
+    try std.testing.expectEqual(@as(anyerror, error.FileNotFound), f.err_value);
     try std.testing.expectEqualStrings("loading config", f.msg);
     try std.testing.expectEqual(@as(usize, 0), f.attrs.len);
     try std.testing.expectEqual(@as(u32, 42), f.line);

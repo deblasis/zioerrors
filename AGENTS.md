@@ -47,6 +47,7 @@ tests/
   integration.zig   end-to-end behavior tests
 examples/
   cli/main.zig      example demonstrating the boundary pattern
+  multi_layer/main.zig  example of context added across three call layers
 build.zig           build configuration
 build.zig.zon       package manifest
 ```

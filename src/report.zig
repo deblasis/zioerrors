@@ -7,7 +7,7 @@ const frame_mod = @import("frame.zig");
 
 /// Snapshot of a thread's breadcrumbs at the time `report()` ran.
 /// Lifetime is tied to the underlying Context: do not retain past
-/// `clear()` or `Context.deinit()`.
+/// `clear()`, `Context.deinit()`, or the next `fail()` on this thread.
 pub const Report = struct {
     err_value: anyerror,
     frames: []const frame_mod.Frame,
@@ -19,28 +19,29 @@ pub const Report = struct {
             return;
         }
         // Walk frames newest-first (innermost is the most recent
-        // failure pushed onto the stack).
+        // failure pushed onto the stack). Each frame prints the error
+        // it was raised for, which is not always the error passed to
+        // report: a layer may translate one error into another.
         const last = self.frames.len - 1;
-        try writeFrame(w, self.err_value, self.frames[last], false);
+        try writeFrame(w, self.frames[last], false);
         var i: usize = last;
         while (i > 0) {
             i -= 1;
             try w.writeAll("\n");
-            try writeFrame(w, self.err_value, self.frames[i], true);
+            try writeFrame(w, self.frames[i], true);
         }
     }
 };
 
 fn writeFrame(
     w: *std.Io.Writer,
-    err_value: anyerror,
     f: frame_mod.Frame,
     caused_by: bool,
 ) std.Io.Writer.Error!void {
     if (caused_by) {
-        try w.print("caused by error.{t}", .{err_value});
+        try w.print("caused by error.{t}", .{f.err_value});
     } else {
-        try w.print("error.{t}", .{err_value});
+        try w.print("error.{t}", .{f.err_value});
     }
     if (f.msg.len > 0) {
         try w.print(": {s}", .{f.msg});
@@ -66,8 +67,13 @@ fn writeFrame(
 /// Snapshot the current thread's breadcrumbs as a Report bound to the
 /// given error. If no Context is installed, returns an empty Report
 /// that prints just `error.X`.
+///
+/// Calling this ends the current chain: the frames stay valid until the
+/// next `fail`, which drops them and starts fresh. Format or copy the
+/// Report before failing again on this thread.
 pub fn report(err_value: anyerror) Report {
     if (context.current) |c| {
+        c.markReported();
         return .{ .err_value = err_value, .frames = c.frames.items };
     }
     return .{ .err_value = err_value, .frames = &.{} };

@@ -16,6 +16,10 @@ pub const Error = error{OutOfMemory};
 pub const Context = struct {
     arena: std.heap.ArenaAllocator,
     frames: std.ArrayList(Frame),
+    /// Set by `report`: the frames on the stack have been handed to a
+    /// boundary, so the next `fail` starts a new chain instead of
+    /// stacking onto the old one. See `startChain`.
+    reported: bool,
 
     /// Initialize a fresh Context backed by the given allocator. The
     /// allocator is used to seed the arena and the frame stack.
@@ -23,6 +27,7 @@ pub const Context = struct {
         return .{
             .arena = std.heap.ArenaAllocator.init(gpa),
             .frames = .empty,
+            .reported = false,
         };
     }
 
@@ -38,6 +43,21 @@ pub const Context = struct {
     pub fn clear(self: *Context) void {
         self.frames.clearRetainingCapacity();
         _ = self.arena.reset(.retain_capacity);
+        self.reported = false;
+    }
+
+    /// Called by `fail` before pushing a frame. If the frames currently
+    /// on the stack were already handed to a `report`, that chain is
+    /// finished, so drop it. This keeps a forgotten `clear` from
+    /// attaching a previous failure's frames to an unrelated error.
+    pub fn startChain(self: *Context) void {
+        if (self.reported) self.clear();
+    }
+
+    /// Called by `report`. Marks the current chain as delivered so the
+    /// next `fail` starts fresh.
+    pub fn markReported(self: *Context) void {
+        self.reported = true;
     }
 };
 
@@ -79,12 +99,42 @@ test "install and uninstall set the threadlocal pointer" {
     try std.testing.expect(current == null);
 }
 
+test "startChain only drops frames once the chain was reported" {
+    var c = Context.init(std.testing.allocator);
+    defer c.deinit();
+    try c.frames.append(c.arena.child_allocator, .{
+        .err_value = error.Boom,
+        .msg = "",
+        .attrs = &.{},
+        .file = "x.zig",
+        .line = 1,
+    });
+
+    // Chain still open: startChain leaves it alone.
+    c.startChain();
+    try std.testing.expectEqual(@as(usize, 1), c.frames.items.len);
+
+    c.markReported();
+    c.startChain();
+    try std.testing.expectEqual(@as(usize, 0), c.frames.items.len);
+    try std.testing.expect(!c.reported);
+}
+
+test "clear cancels the reported mark" {
+    var c = Context.init(std.testing.allocator);
+    defer c.deinit();
+    c.markReported();
+    c.clear();
+    try std.testing.expect(!c.reported);
+}
+
 test "Context clear resets arena and frames after manual push" {
     var c = Context.init(std.testing.allocator);
     defer c.deinit();
     const arena_alloc = c.arena.allocator();
     const msg = try arena_alloc.dupe(u8, "hello");
     try c.frames.append(c.arena.child_allocator, .{
+        .err_value = error.Boom,
         .msg = msg,
         .attrs = &.{},
         .file = "x.zig",

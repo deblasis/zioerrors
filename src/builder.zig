@@ -112,11 +112,18 @@ pub const Builder = struct {
 };
 
 /// Push a new frame and return a Builder. The frame captures the
-/// caller-provided source location. If no Context is installed, no
-/// frame is pushed but the Builder still carries the error.
+/// caller-provided source location and the error it was raised for. If
+/// no Context is installed, no frame is pushed but the Builder still
+/// carries the error.
+///
+/// If the frames already on the stack were handed to `report`, that
+/// chain is done: it is dropped here so its frames cannot show up under
+/// an unrelated later error.
 pub fn fail(err_value: anyerror, src: std.builtin.SourceLocation) Builder {
     if (context.current) |c| {
+        c.startChain();
         c.frames.append(c.arena.child_allocator, .{
+            .err_value = err_value,
             .msg = "",
             .attrs = &.{},
             .file = src.file,

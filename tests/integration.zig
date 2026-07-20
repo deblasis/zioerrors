@@ -230,6 +230,87 @@ test "clear between operations resets for reuse" {
     try std.testing.expectEqualStrings("second", c.frames.items[0].msg);
 }
 
+// Regression: a report used to dump whatever was on the thread stack and
+// stamp the reported error's name onto every frame, so a forgotten
+// `clear` made an unrelated earlier failure show up as "caused by" the
+// current one, with that older frame's file, line and attributes. A
+// report now ends the chain: the next `fail` starts a fresh one.
+test "frames from a reported failure do not leak into the next error" {
+    var c = zio.Context.init(std.testing.allocator);
+    defer c.deinit();
+    zio.install(&c);
+    defer zio.uninstall();
+
+    // Operation A fails, the boundary reports it and forgets to clear.
+    _ = zio.fail(error.DiskFull, @src()).ctx("writing cache").attr("path", "/var/cache");
+    var buf_a: [512]u8 = undefined;
+    var wa: std.Io.Writer = .fixed(&buf_a);
+    try zio.report(error.DiskFull).format(&wa);
+    try std.testing.expect(std.mem.indexOf(u8, buf_a[0..wa.end], "writing cache") != null);
+
+    // Unrelated operation B fails on the same thread.
+    _ = zio.fail(error.NotFound, @src()).ctx("looking up user").attr("id", @as(u64, 7));
+    try std.testing.expectEqual(@as(usize, 1), c.frames.items.len);
+
+    var buf_b: [512]u8 = undefined;
+    var wb: std.Io.Writer = .fixed(&buf_b);
+    try zio.report(error.NotFound).format(&wb);
+    const out = buf_b[0..wb.end];
+    try std.testing.expect(std.mem.indexOf(u8, out, "looking up user") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "writing cache") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "/var/cache") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "caused by") == null);
+}
+
+// Regression: every frame used to be printed with the error passed to
+// `report`, so a layer that translates one error into another lied about
+// what the inner layer actually failed with.
+test "each frame prints the error it was raised for" {
+    var c = zio.Context.init(std.testing.allocator);
+    defer c.deinit();
+    zio.install(&c);
+    defer zio.uninstall();
+
+    _ = zio.fail(error.FileNotFound, @src()).ctx("reading file");
+    _ = zio.fail(error.ConfigInvalid, @src()).ctx("loading config");
+
+    var buf: [512]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try zio.report(error.ConfigInvalid).format(&w);
+    const out = buf[0..w.end];
+    try std.testing.expect(std.mem.startsWith(u8, out, "error.ConfigInvalid: loading config"));
+    try std.testing.expect(std.mem.indexOf(u8, out, "caused by error.FileNotFound: reading file") != null);
+}
+
+// A chain that is still propagating is not affected by the reset: only
+// a `fail` that follows a `report` starts over.
+test "wrapping layers keep stacking until the chain is reported" {
+    var c = zio.Context.init(std.testing.allocator);
+    defer c.deinit();
+    zio.install(&c);
+    defer zio.uninstall();
+
+    _ = zio.fail(error.X, @src()).ctx("inner");
+    _ = zio.fail(error.X, @src()).ctx("middle");
+    _ = zio.fail(error.X, @src()).ctx("outer");
+    try std.testing.expectEqual(@as(usize, 3), c.frames.items.len);
+}
+
+test "reporting in a loop does not grow the frame stack" {
+    var c = zio.Context.init(std.testing.allocator);
+    defer c.deinit();
+    zio.install(&c);
+    defer zio.uninstall();
+
+    for (0..100) |i| {
+        _ = zio.fail(error.X, @src()).ctxf("attempt {d}", .{i});
+        var buf: [128]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&buf);
+        try zio.report(error.X).format(&w);
+        try std.testing.expectEqual(@as(usize, 1), c.frames.items.len);
+    }
+}
+
 test "unsigned attr renders correctly" {
     var c = zio.Context.init(std.testing.allocator);
     defer c.deinit();

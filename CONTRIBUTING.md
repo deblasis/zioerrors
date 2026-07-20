@@ -8,19 +8,22 @@ and a few simple conventions.
 
 You need [Zig 0.16.0](https://ziglang.org/download/) on your `PATH`.
 
+You also want [just](https://github.com/casey/just), since CI runs the
+same `just ci` recipe you can run locally.
+
 ```sh
-git clone …
-cd <repo>
-zig build test          # run tests
-zig build run-example   # run the example (if any)
-zig fmt --check src tests examples build.zig  # lint
+git clone https://github.com/deblasis/zioerrors
+cd zioerrors
+just ci                 # fmt check, tests, examples: what CI runs
+zig build test          # tests only
+zig build run-example   # run examples/cli
 ```
 
 ## Pull Requests
 
 1. Fork and create a branch from `main`.
 2. Make your change. Add or update tests.
-3. Run `zig build test` and `zig fmt --check src tests examples build.zig`.
+3. Run `just ci` and make sure it exits 0.
 4. Open a PR with a clear description of **what** and **why**.
 
 ## Reporting Issues
@@ -33,7 +36,7 @@ Open a [GitHub issue](../../issues/new) with:
 
 ## Code Style
 
-- Follow `zig fmt` — no custom formatting.
+- Follow `zig fmt`, no custom formatting.
 - Doc comments on every public symbol.
 - Prefer explicit error sets over `anyerror` where practical.
 

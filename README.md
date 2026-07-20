@@ -52,6 +52,32 @@ caused by error.FileNotFound: loading config (path=/etc/app.toml)
   at src/config.zig:42
 ```
 
+Each frame prints the error it was raised for, so a layer that turns one
+error into another says so:
+
+```
+error.ConfigInvalid: loading config (path=/etc/app.toml)
+  at src/config.zig:42
+caused by error.FileNotFound: reading file
+  at src/io.zig:11
+```
+
+## Chain lifetime
+
+The breadcrumbs live on a thread-local stack, so it matters when a chain
+starts and ends.
+
+- Every `fail` pushes onto the current chain, which is how a wrapped
+  error accumulates layers as it propagates.
+- `report` ends the chain. The frames stay readable until the next
+  `fail` on that thread, which drops them and starts a new chain. So a
+  forgotten `clear` cannot make one operation's frames show up under the
+  next operation's error. Do not hold a `Report` across a later `fail`:
+  it borrows the context's memory, which gets reused.
+- `clear()` ends the chain right away. You only need it when an
+  operation fails, is handled without a report, and the thread then goes
+  on to unrelated work. Those frames have nothing else to end them.
+
 ## Install
 
 ```bash
@@ -113,12 +139,14 @@ fn work() !void {
   - `.attr(key, value)`: typed attribute (string, signed int, unsigned int, float, bool).
   - `.err()`: terminal, returns the original error.
 - `zioerrors.failf(err, @src(), fmt, args)`: one-shot wrap with a formatted line.
-- `zioerrors.report(err)`: snapshot the chain for printing as `{f}`.
-- `zioerrors.clear()`: drop frames, reset arena (call between independent operations).
+- `zioerrors.report(err)`: snapshot the chain for printing as `{f}`. Ends the chain.
+- `zioerrors.clear()`: drop frames, reset arena. For failures that are handled without a report.
 
 ## Examples
 
-See `examples/cli/main.zig`. Run with `zig build run-example`.
+- `examples/cli/main.zig`: the boundary pattern. Run with `zig build run-example`.
+- `examples/multi_layer/main.zig`: context added across three call layers.
+  Run with `zig build run-example-multi-layer`.
 
 ## FAQ
 
@@ -133,9 +161,12 @@ channel and re-attach context on the receiving thread).
 explicitly costs one token per call but means the recorded frame
 points at your code, not at the library wrapper.
 
-**What if I forget to `clear()`?** Stale frames from a previous
-failure will appear in a later report. The fix is to `clear()` at
-each boundary.
+**What if I forget to `clear()`?** Usually nothing, because `report`
+ends the chain and the next `fail` starts a new one. The case that
+still needs `clear()` is a failure you handle without reporting it:
+nothing tells the library that operation is over, so those frames are
+still on the stack when the next failure starts stacking on top of
+them. See "Chain lifetime" above.
 
 **Allocation behavior?** Zero allocation on the happy path.
 Allocations happen only inside `fail`, `ctx`, `ctxf`, and `attr`
@@ -146,12 +177,6 @@ paths, and go to the per-thread arena, which is reclaimed in O(1) by
 allocate while recording context, the frame or attribute is silently
 dropped. The original error still propagates. Trade-off: the library
 never widens your error set with its own `error.OutOfMemory`.
-
-## Design
-
-See `docs/superpowers/SEED.md` for the original brief and
-`docs/superpowers/specs/2026-04-29-zioerrors-design.md` for the v0.1
-design notes.
 
 ## Compatibility
 
